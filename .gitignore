@@ -1,0 +1,4 @@
+keys
+terraform/.terraform
+data/data.txt
+credentials.json

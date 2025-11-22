@@ -1,0 +1,95 @@
+- name: Configure Spark Cluster
+  hosts: spark_cluster
+  become: yes
+
+  vars:
+    spark_version: "2.4.3"
+    spark_url: "https://archive.apache.org/dist/spark/spark-2.4.3/spark-2.4.3-bin-hadoop2.7.tgz"
+    spark_master_ip: "10.0.0.3"
+
+  tasks:
+
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+
+    - name: Install Java 8 (recommended for Spark 2.4.3)
+      apt:
+        name: openjdk-8-jdk
+        state: present
+
+    - name: Install dependencies
+      apt:
+        name:
+          - wget
+          - tar
+        state: present
+
+    # Reset Spark Install
+    - name: Remove old spark installation
+      file:
+        path: /opt/spark
+        state: absent
+
+    - name: Download Spark 2.4.3
+      get_url:
+        url: "{{ spark_url }}"
+        dest: /tmp/spark.tgz
+
+    # Extract raw archive into /opt
+    - name: Extract Spark (no strip)
+      unarchive:
+        src: /tmp/spark.tgz
+        dest: /opt
+        remote_src: yes
+
+    # Detect real spark folder (guaranteed to work even if archive changes)
+    - name: Detect Spark extracted directory
+      shell: "ls -d /opt/spark-2.4.3*"
+      register: spark_dir
+
+    - name: Move Spark to /opt/spark
+      command: mv {{ spark_dir.stdout }} /opt/spark
+      args:
+        creates: /opt/spark
+
+    - name: Ensure jars directory exists
+      file:
+        path: /opt/spark/jars
+        state: directory
+        mode: "0755"
+
+    - name: Set Spark environment variables
+      lineinfile:
+        path: /home/ubuntu/.bashrc
+        line: |
+          export SPARK_HOME=/opt/spark
+          export PATH=$PATH:$SPARK_HOME/bin:$SPARK_HOME/sbin
+        create: yes
+
+    - name: Download GCS Connector
+      get_url:
+        url: "https://github.com/GoogleCloudDataproc/hadoop-connectors/releases/download/v2.2.16/gcs-connector-hadoop3-2.2.16-shaded.jar"
+        dest: /opt/spark/jars/gcs-connector-hadoop3.jar
+        mode: '0644'
+
+    # STOP services cleanly
+    - name: Stop Spark Master if running
+      shell: "pkill -f org.apache.spark.deploy.master.Master"
+      failed_when: false
+      when: "'master' in group_names"
+
+    - name: Stop Spark Worker if running
+      shell: "pkill -f org.apache.spark.deploy.worker.Worker"
+      failed_when: false
+      when: "'workers' in group_names"
+
+    # START MASTER
+    - name: Start Spark Master
+      shell: "/opt/spark/sbin/start-master.sh"
+      when: "'master' in group_names"
+
+    # START WORKER (Spark 2.x = start-slave)
+    - name: Start Spark Worker
+      shell: "/opt/spark/sbin/start-slave.sh spark://{{ spark_master_ip }}:7077"
+      when: "'workers' in group_names"
