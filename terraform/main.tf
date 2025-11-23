@@ -36,7 +36,7 @@ resource "google_compute_firewall" "allow_internal" {
     ports = ["0-65535"]
   }
 
-  source_ranges = ["10.0.1.0/24"]
+  source_ranges = ["10.0.0.0/16"]
 }
 
 # SSH access

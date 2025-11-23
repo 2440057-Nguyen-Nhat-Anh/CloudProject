@@ -67,21 +67,30 @@
           export PATH=$PATH:$SPARK_HOME/bin:$SPARK_HOME/sbin
         create: yes
 
-    - name: Download GCS Connector
+    - name: Download correct GCS Connector for Hadoop2 (Spark 2.4.3 compatibility)
       get_url:
-        url: "https://github.com/GoogleCloudDataproc/hadoop-connectors/releases/download/v2.2.16/gcs-connector-hadoop3-2.2.16-shaded.jar"
-        dest: /opt/spark/jars/gcs-connector-hadoop3.jar
+        url: "https://storage.googleapis.com/hadoop-lib/gcs/gcs-connector-hadoop2-2.2.5.jar"
+        dest: /opt/spark/jars/gcs-connector-hadoop2.jar
         mode: '0644'
 
+    - name: Remove wrong Hadoop3 GCS connectors
+      shell: rm -f /opt/spark/jars/gcs-connector-hadoop3*.jar
+
     # STOP services cleanly
-    - name: Stop Spark Master if running
-      shell: "pkill -f org.apache.spark.deploy.master.Master"
+    - name: Stop Spark Master if running and clean PID files
+      shell: |
+        /opt/spark/sbin/stop-master.sh
+        rm -f /opt/spark/logs/spark-*.pid
       failed_when: false
+      changed_when: false # Prevent reporting a change unless strictly necessary
       when: "'master' in group_names"
 
-    - name: Stop Spark Worker if running
-      shell: "pkill -f org.apache.spark.deploy.worker.Worker"
+    - name: Stop Spark Worker if running and clean PID files
+      shell: |
+        /opt/spark/sbin/stop-slave.sh
+        rm -f /opt/spark/logs/spark-*.pid
       failed_when: false
+      changed_when: false
       when: "'workers' in group_names"
 
     # START MASTER
